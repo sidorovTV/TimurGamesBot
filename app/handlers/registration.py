@@ -4,7 +4,7 @@ from aiogram.fsm.context import FSMContext
 from app.states.registration import RegistrationStates
 from app.services.database import save_user
 from app.utils.validators import is_valid_age, is_valid_russian_name
-from app.handlers.menu import get_main_menu_keyboard
+from app.keyboards.menu import get_main_menu_keyboard
 router = Router()
 
 
@@ -29,7 +29,7 @@ async def process_age(message: Message, state: FSMContext):
     user_data = await state.get_data()
     await state.clear()
 
-    save_user(user_data['name'], age, user_data['username'], user_data['user_id'])
+    await save_user(user_data['name'], age, user_data['username'], user_data['user_id'])
 
     await message.answer(
         f"Регистрация завершена!\n"
