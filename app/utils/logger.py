@@ -21,5 +21,11 @@ def setup_logger(name, log_file, level=logging.INFO):
 
 # Setup loggers
 main_logger = setup_logger('main', 'logs/main.log')
-db_logger = setup_logger('database', 'logs/database.log')
-handler_logger = setup_logger('handlers', 'logs/handlers.log')
+db_logger = setup_logger('database', 'logs/main.log')
+admin_logger = setup_logger('admin', 'logs/main.log')
+session_logger = setup_logger('session', 'logs/main.log')
+help_logger = setup_logger('help', 'logs/main.log')
+registration_logger = setup_logger('registration', 'logs/main.log')
+start_logger = setup_logger('start', 'logs/main.log')
+menu_logger = setup_logger('menu', 'logs/main.log')
+notification_logger = setup_logger('notification', 'logs/main.log')

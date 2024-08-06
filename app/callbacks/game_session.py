@@ -7,8 +7,6 @@ from app.handlers.game_session import router
 from app.services.database import (get_sessions,
                                    leave_session,
                                    join_session,
-                                   get_session_participants,
-                                   update_session_confirmation,
                                    remove_participant,
                                    get_session_participants,
                                    get_session_info)
@@ -18,20 +16,25 @@ from app.utils.message_cleaner import message_cleaner
 from app.keyboards.sessions import get_sessions_list_keyboard
 from app.services.database import update_session_confirmation
 from app.keyboards.menu import get_main_menu_keyboard, back_to_main_menu_keyboard
+from app.utils.logger import session_logger
 
 
 @router.callback_query(F.data.startswith("game_"))
 async def process_game_selection(callback: CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
     game = callback.data.split("_")[1]
+    session_logger.info(f"User {user_id} selected game: {game}")
     if game == "other":
         response = await callback.message.answer("Введите название игры:")
-        await message_cleaner.add_message_to_delete(callback.from_user.id, response)
+        await message_cleaner.add_message_to_delete(user_id, response)
         await state.set_state(SessionCreation.choosing_game)
+        session_logger.info(f"User {user_id} prompted to enter custom game name")
     else:
         await state.update_data(game=game)
         response = await callback.message.answer("Выберите дату проведения игры (в формате ГГГГ-ММ-ДД):")
-        await message_cleaner.add_message_to_delete(callback.from_user.id, response)
+        await message_cleaner.add_message_to_delete(user_id, response)
         await state.set_state(SessionCreation.setting_date)
+        session_logger.info(f"User {user_id} prompted to enter date for game {game}")
 
 
 def format_sessions_list(sessions):
@@ -48,13 +51,15 @@ def format_sessions_list(sessions):
 
 @router.callback_query(F.data == "list_sessions")
 async def show_sessions(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    session_logger.info(f"User {user_id} requested session list")
     sessions = await get_sessions()
     if not sessions:
         text_message = "Нет доступных сессий."
-        print(callback.message.from_user.id)
+        session_logger.info(f"No available sessions for user {user_id}")
         await callback.message.edit_text(
             text_message,
-            reply_markup=back_to_main_menu_keyboard(callback.message.from_user.id)
+            reply_markup=back_to_main_menu_keyboard(user_id)
         )
         return
 
@@ -62,15 +67,19 @@ async def show_sessions(callback: CallbackQuery):
     keyboard = get_sessions_list_keyboard(sessions)
 
     await callback.message.edit_text(text, reply_markup=keyboard)
+    session_logger.info(f"Session list displayed for user {user_id}")
 
 
 @router.callback_query(F.data.startswith("session_info_"))
 async def show_session_info(callback: CallbackQuery):
+    user_id = callback.from_user.id
     session_id = int(callback.data.split("_")[-1])
+    session_logger.info(f"User {user_id} requested info for session {session_id}")
     sessions = await get_sessions()
     session = next((s for s in sessions if s[0] == session_id), None)
 
     if not session:
+        session_logger.warning(f"Session {session_id} not found for user {user_id}")
         await callback.edit_text("Сессия не найдена.")
         return
 
@@ -90,8 +99,6 @@ async def show_session_info(callback: CallbackQuery):
 
     builder = InlineKeyboardBuilder()
 
-    # Проверяем, является ли текущий пользователь участником сессии
-    user_id = callback.from_user.id
     is_participant = any(user_id == participant[0] for participant in participants)
 
     if is_participant:
@@ -103,48 +110,54 @@ async def show_session_info(callback: CallbackQuery):
     builder.adjust(1)  # Размещаем кнопки в один столбец
 
     await callback.message.edit_text(text, reply_markup=builder.as_markup())
+    session_logger.info(f"Session info displayed for user {user_id}, session {session_id}")
 
 
 @router.callback_query(F.data.startswith("leave_"))
 async def leave_game_session(callback: CallbackQuery):
+    user_id = callback.from_user.id
     session_id = int(callback.data.split("_")[1])
-    await leave_session(session_id, callback.from_user.id)
+    session_logger.info(f"User {user_id} attempting to leave session {session_id}")
+    await leave_session(session_id, user_id)
     await callback.edit_text("Вы успешно вышли из сессии!")
-    await show_session_info(callback)  # Обновляем информацию о сессии
+    session_logger.info(f"User {user_id} left session {session_id}")
+    await show_session_info(callback)
 
 
 @router.callback_query(F.data.startswith("join_"))
 async def join_game_session(callback: CallbackQuery):
+    user_id = callback.from_user.id
     session_id = int(callback.data.split("_")[1])
-    await join_session(session_id, callback.from_user.id)
+    session_logger.info(f"User {user_id} attempting to join session {session_id}")
+    await join_session(session_id, user_id)
     await callback.edit_text("Вы успешно присоединились к сессии!")
-    await show_session_info(callback)  # Обновляем информацию о сессии
+    session_logger.info(f"User {user_id} joined session {session_id}")
+    await show_session_info(callback)
 
 
 @router.callback_query(F.data == "back_to_menu")
 async def back_to_menu(callback: CallbackQuery):
-    from app.keyboards.menu import get_main_menu_keyboard
     user_id = callback.from_user.id
+    session_logger.info(f"User {user_id} returning to main menu")
     await callback.message.edit_text("Главное меню:", reply_markup=get_main_menu_keyboard(user_id))
 
 
 @router.callback_query(F.data.startswith("confirm_"))
 async def confirm_session(callback: CallbackQuery, bot: Bot):
-    session_id = int(callback.data.split("_")[1])
     user_id = callback.from_user.id
+    session_id = int(callback.data.split("_")[1])
     user_name = callback.from_user.full_name
     username = callback.from_user.username
 
+    session_logger.info(f"User {user_id} confirming participation in session {session_id}")
     await update_session_confirmation(session_id, user_id, "confirmed")
-    confirm_text = ("Вы подтвердили свое участие в сессии!" + "\n\nСтатус: Подтверждено")
+    confirm_text = "Вы подтвердили свое участие в сессии!\n\nСтатус: Подтверждено"
 
-    # Отправляем сообщение с клавиатурой главного меню
     response = await callback.message.edit_text(
         confirm_text,
-        reply_markup=get_main_menu_keyboard(callback.message.from_user.id)
+        reply_markup=get_main_menu_keyboard(user_id)
     )
 
-    # Отправляем уведомление всем участникам сессии
     session_info = await get_session_info(session_id)
     participants = await get_session_participants(session_id)
 
@@ -160,18 +173,21 @@ async def confirm_session(callback: CallbackQuery, bot: Bot):
             await bot.send_message(participant['id'], notification_text,
                                    reply_markup=get_main_menu_keyboard(participant['id']))
 
+    session_logger.info(f"User {user_id} confirmed participation in session {session_id}. Notifications sent.")
+
 
 @router.callback_query(F.data.startswith("decline_"))
 async def decline_session(callback: CallbackQuery, bot: Bot):
-    session_id = int(callback.data.split("_")[1])
     user_id = callback.from_user.id
+    session_id = int(callback.data.split("_")[1])
 
+    await message_cleaner.delete_previous_messages(callback.message.bot, user_id)
+    session_logger.info(f"User {user_id} declining participation in session {session_id}")
     await update_session_confirmation(session_id, user_id, "declined")
     await remove_participant(session_id, user_id)
     await callback.message.edit_text(
         "Вы отклонили участие в сессии и были удалены из списка участников." + "\n\nСтатус: Отклонено и удалено из сессии")
 
-    # Отправляем уведомление всем участникам сессии
     session_info = await get_session_info(session_id)
     participants = await get_session_participants(session_id)
 
@@ -186,3 +202,5 @@ async def decline_session(callback: CallbackQuery, bot: Bot):
     for participant in participants:
         if participant['id'] != user_id:
             await bot.send_message(participant['id'], notification_text)
+
+    session_logger.info(f"User {user_id} declined participation in session {session_id}. Notifications sent.")
