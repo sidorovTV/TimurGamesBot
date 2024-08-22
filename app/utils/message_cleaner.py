@@ -27,3 +27,4 @@ class MessageCleaner:
         self.message_ids[user_id].append((message.chat.id, message.message_id))
 
 message_cleaner = MessageCleaner()
+

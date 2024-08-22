@@ -8,6 +8,9 @@ from app.keyboards.menu import get_main_menu_keyboard
 from app.utils.message_cleaner import message_cleaner
 from app.utils.logger import start_logger
 
+from aiogram.types import FSInputFile
+from pathlib import Path
+
 router = Router()
 
 
@@ -16,8 +19,18 @@ async def cmd_start(message: Message, state: FSMContext):
     user_id = message.from_user.id
     start_logger.info(f"User {user_id} started the bot")
 
-    await message_cleaner.add_user_message(message)
-    await message.answer("Привет! Это бот для созданий сессий.")
+
+    # Путь к изображению
+    image_path = Path("images/2.png")
+
+    # Отправляем изображение вместо текстового сообщения
+    welcome_image = FSInputFile(image_path)
+    await message.answer_photo(
+        photo=welcome_image,
+        caption="Добро пожаловать в бот для создания игровых сессий!"
+    )
+
+    await message.delete()
 
     # Удаляем предыдущие сообщения
     await message_cleaner.delete_previous_messages(message.bot, user_id)
