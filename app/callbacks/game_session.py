@@ -190,7 +190,7 @@ async def confirm_session(callback: CallbackQuery, bot: Bot):
                 await message_cleaner.delete_previous_messages(bot, user_id)
 
                 new_message = await callback.message.answer(
-                    "Вы подтвердили свое участие в сессии. Вот главное меню:",
+                    "Вот главное меню:",
                     reply_markup=get_main_menu_keyboard(user_id)
                 )
 
@@ -252,7 +252,7 @@ async def decline_session(callback: CallbackQuery, bot: Bot):
                 await message_cleaner.delete_previous_messages(bot, user_id)
 
                 new_message = await callback.message.answer(
-                    "Вы отклонили участие в сессии и были удалены из списка участников. Вот главное меню:",
+                    "Вот главное меню:",
                     reply_markup=get_main_menu_keyboard(user_id)
                 )
 
