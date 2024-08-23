@@ -93,14 +93,14 @@ async def get_sessions():
         try:
             db.row_factory = aiosqlite.Row
             async with db.execute("""
-                SELECT s.id, s.game, s.date, s.time, s.max_players, 
+                SELECT s.id, s.game, s.date, s.time, s.max_players,
                        COUNT(p.user_id) as current_players, u.name as creator_name
                 FROM sessions s
                 LEFT JOIN participants p ON s.id = p.session_id
                 JOIN users u ON s.creator_id = u.id
-                WHERE s.date >= date('now')
+                WHERE s.date >= date('now') and s.time >= time('now','localtime')
                 GROUP BY s.id
-                ORDER BY s.date, s.time
+                ORDER BY s.date, s.time;
             """) as cursor:
                 sessions = await cursor.fetchall()
             db_logger.info(f"Retrieved {len(sessions)} active sessions")
