@@ -10,16 +10,32 @@ async def init_db():
     db_logger.info("Initializing database")
     async with aiosqlite.connect(DATABASE_PATH) as db:
         try:
+            # Создаем таблицу users, если она еще не существует
             await db.execute('''CREATE TABLE IF NOT EXISTS users
-                         (id INTEGER PRIMARY KEY, name TEXT, age INTEGER, username TEXT, is_blocked INTEGER DEFAULT 0,
-                          block_reason TEXT)''')
+                                (id INTEGER PRIMARY KEY, name TEXT, age INTEGER, username TEXT, is_blocked INTEGER DEFAULT 0,
+                                 block_reason TEXT)''')
+
+            # Создаем таблицу sessions, если она еще не существует
             await db.execute('''CREATE TABLE IF NOT EXISTS sessions
-                         (id INTEGER PRIMARY KEY, game TEXT, date TEXT, time TEXT, max_players INTEGER, creator_id INTEGER)''')
+                                (id INTEGER PRIMARY KEY, game TEXT, date TEXT, time TEXT, max_players INTEGER, creator_id INTEGER)''')
+
+            # Создаем таблицу participants, если она еще не существует
             await db.execute('''CREATE TABLE IF NOT EXISTS participants
-                         (session_id INTEGER, user_id INTEGER, PRIMARY KEY (session_id, user_id))''')
+                                (session_id INTEGER, user_id INTEGER, PRIMARY KEY (session_id, user_id))''')
+
+            # Создаем таблицу session_confirmations, если она еще не существует
             await db.execute('''CREATE TABLE IF NOT EXISTS session_confirmations
-                                 (session_id INTEGER, user_id INTEGER, status TEXT, 
-                                  PRIMARY KEY (session_id, user_id))''')
+                                (session_id INTEGER, user_id INTEGER, status TEXT, 
+                                 PRIMARY KEY (session_id, user_id))''')
+
+            # Создаем новую таблицу user_session_events для хранения истории событий
+            await db.execute('''CREATE TABLE IF NOT EXISTS user_session_events
+                                (id INTEGER PRIMARY KEY,
+                                 user_id INTEGER,
+                                 session_id INTEGER,
+                                 event_type TEXT,
+                                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+
             await db.commit()
             db_logger.info("Database initialized successfully")
         except Exception as e:
@@ -298,34 +314,20 @@ async def get_user_sessions(user_id: int) -> Optional[List[Dict[str, any]]]:
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
         try:
+            current_datetime = datetime.now().strftime("%Y-%m-%d %H:%M")
+
             async with db.execute("""
                 SELECT id, game, date, time, max_players, 
-                       (SELECT COUNT(*) FROM participants WHERE session_id = sessions.id) as current_players
+                       (SELECT COUNT(*) FROM participants WHERE session_id = sessions.id) as current_players,
+                       creator_id = ? as is_creator
                 FROM sessions
-                WHERE creator_id = ?
-                AND date >= date('now') 
-                ORDER BY date DESC, time DESC
-            """, (user_id,)) as cursor:
-                created_sessions = await cursor.fetchall()
+                WHERE (creator_id = ? OR id IN (SELECT session_id FROM participants WHERE user_id = ?))
+                AND datetime(date || ' ' || time) >= datetime(?)
+                ORDER BY date ASC, time ASC
+            """, (user_id, user_id, user_id, current_datetime)) as cursor:
+                sessions = await cursor.fetchall()
 
-            async with db.execute("""
-                SELECT s.id, s.game, s.date, s.time, s.max_players,
-                       (SELECT COUNT(*) FROM participants WHERE session_id = s.id) as current_players
-                FROM sessions s
-                JOIN participants p ON s.id = p.session_id
-                WHERE p.user_id = ? AND s.creator_id != ?
-                AND date >= date('now') 
-                ORDER BY s.date DESC, s.time DESC
-            """, (user_id, user_id)) as cursor:
-                participated_sessions = await cursor.fetchall()
-
-            all_sessions = []
-            for session in created_sessions:
-                all_sessions.append(dict(session, is_creator=True))
-            for session in participated_sessions:
-                all_sessions.append(dict(session, is_creator=False))
-
-            all_sessions.sort(key=lambda x: (x['date'], x['time']), reverse=True)
+            all_sessions = [dict(session) for session in sessions]
 
             db_logger.info(f"Retrieved {len(all_sessions)} sessions for user {user_id}")
             return all_sessions
@@ -417,20 +419,22 @@ async def get_session_participants(session_id: int):
             db_logger.error(f"Unexpected error while fetching session participants: {e}", exc_info=True)
             raise
 
-async def get_session_info(session_id: int):
+async def get_session_info(session_id: int) -> Optional[Dict[str, any]]:
     db_logger.info(f"Fetching info for session ID: {session_id}")
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
         try:
             async with db.execute("""
-                SELECT game, date, time
-                FROM sessions
-                WHERE id = ?
+                SELECT s.id, s.game, s.date, s.time, s.max_players, s.creator_id, u.name as creator_name
+                FROM sessions s
+                JOIN users u ON s.creator_id = u.id
+                WHERE s.id = ?
             """, (session_id,)) as cursor:
                 session = await cursor.fetchone()
             if session:
-                db_logger.info(f"Session info retrieved for session {session_id}: {dict(session)}")
-                return dict(session)
+                session_dict = dict(session)
+                db_logger.info(f"Session info retrieved for session {session_id}: {session_dict}")
+                return session_dict
             else:
                 db_logger.warning(f"No session found with ID {session_id}")
                 return None
@@ -439,4 +443,102 @@ async def get_session_info(session_id: int):
             raise
         except Exception as e:
             db_logger.error(f"Unexpected error while fetching session info: {e}", exc_info=True)
+            raise
+
+async def update_user_info(user_id: int, name: str = None, age: int = None):
+    db_logger.info(f"Updating user info for user {user_id}")
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        try:
+            if name is not None:
+                await db.execute("UPDATE users SET name = ? WHERE id = ?", (name, user_id))
+            if age is not None:
+                await db.execute("UPDATE users SET age = ? WHERE id = ?", (age, user_id))
+            await db.commit()
+            db_logger.info(f"User info updated successfully for user {user_id}")
+        except aiosqlite.Error as e:
+            db_logger.error(f"Database error while updating user info: {e}", exc_info=True)
+            raise
+        except Exception as e:
+            db_logger.error(f"Unexpected error while updating user info: {e}", exc_info=True)
+            raise
+
+
+async def delete_session(session_id: int, user_id: int) -> bool:
+    db_logger.info(f"Attempting to delete session {session_id} by user {user_id}")
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        try:
+            # Проверяем, является ли пользователь создателем сессии
+            async with db.execute("SELECT creator_id FROM sessions WHERE id = ?", (session_id,)) as cursor:
+                result = await cursor.fetchone()
+                if not result or result[0] != user_id:
+                    db_logger.warning(f"User {user_id} attempted to delete session {session_id} without permission")
+                    return False
+
+            # Удаляем записи из таблицы participants
+            await db.execute("DELETE FROM participants WHERE session_id = ?", (session_id,))
+
+            # Удаляем записи из таблицы session_confirmations
+            await db.execute("DELETE FROM session_confirmations WHERE session_id = ?", (session_id,))
+
+            # Удаляем саму сессию
+            await db.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+
+            await db.commit()
+            db_logger.info(f"Successfully deleted session {session_id}")
+            return True
+        except Exception as e:
+            db_logger.error(f"Error deleting session {session_id}: {e}", exc_info=True)
+            return False
+
+async def get_user_session_history(user_id: int):
+    db_logger.info(f"Fetching session history for user {user_id}")
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        try:
+            query = """
+            WITH current_sessions AS (
+                SELECT DISTINCT session_id
+                FROM participants
+                WHERE user_id = ? AND session_id IN (
+                    SELECT id FROM sessions WHERE date >= date('now')
+                )
+                EXCEPT
+                SELECT session_id
+                FROM user_session_events
+                WHERE user_id = ? AND event_type = 'left'
+            )
+            SELECT use.session_id, use.event_type, use.timestamp, u.name as user_name, s.game
+            FROM user_session_events use
+            JOIN sessions s ON use.session_id = s.id
+            JOIN users u ON use.user_id = u.id
+            WHERE use.session_id IN (SELECT session_id FROM current_sessions)
+            ORDER BY use.timestamp DESC
+            LIMIT 50
+            """
+            async with db.execute(query, (user_id, user_id)) as cursor:
+                history = await cursor.fetchall()
+            db_logger.info(f"Retrieved {len(history)} history events for sessions user {user_id} is currently participating in")
+            return [dict(event) for event in history]
+        except aiosqlite.Error as e:
+            db_logger.error(f"Database error while fetching user session history: {e}", exc_info=True)
+            raise
+        except Exception as e:
+            db_logger.error(f"Unexpected error while fetching user session history: {e}", exc_info=True)
+            raise
+
+async def add_user_session_event(user_id: int, session_id: int, event_type: str):
+    db_logger.info(f"Adding session event for user {user_id}, session {session_id}, event type: {event_type}")
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        try:
+            await db.execute("""
+                INSERT INTO user_session_events (user_id, session_id, event_type)
+                VALUES (?, ?, ?)
+            """, (user_id, session_id, event_type))
+            await db.commit()
+            db_logger.info(f"Session event added successfully")
+        except aiosqlite.Error as e:
+            db_logger.error(f"Database error while adding session event: {e}", exc_info=True)
+            raise
+        except Exception as e:
+            db_logger.error(f"Unexpected error while adding session event: {e}", exc_info=True)
             raise

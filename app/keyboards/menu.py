@@ -1,6 +1,6 @@
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from app.config_reader import config
-
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 def get_main_menu_keyboard(user_id: int):
     builder = InlineKeyboardBuilder()
@@ -44,6 +44,7 @@ def get_my_sessions_keyboard(user_sessions):
     for session in user_sessions:
         builder.button(text=f"Сессия {session['id']}", callback_data=f"session_info_{session['id']}")
 
+    builder.button(text="История", callback_data="session_history")
     builder.button(text="Назад в меню", callback_data="back_to_menu")
     builder.adjust(1)
 
@@ -58,3 +59,9 @@ def get_manage_users_keyboard():
     builder.button(text="⬅️ Назад", callback_data="back_to_menu")
     builder.adjust(2)
     return builder.as_markup()
+
+
+def get_cancel_keyboard():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Отменить и вернуться в главное меню", callback_data="cancel_session_creation")]
+    ])

@@ -1,17 +1,20 @@
-import time
 import asyncio
 from aiogram import F, Bot
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from app.callbacks.menu import show_my_sessions
 from app.handlers.game_session import router
+from app.handlers.help import get_back_menu_keyboard
 from app.services.database import (get_sessions,
                                    leave_session,
                                    join_session,
                                    remove_participant,
                                    get_session_participants,
-                                   get_session_info)
+                                   get_session_info,
+                                   delete_session,
+                                   get_user_session_history, add_user_session_event)
 
 from app.states.game_sassion import SessionCreation
 from app.utils.message_cleaner import message_cleaner
@@ -19,7 +22,6 @@ from app.keyboards.sessions import get_sessions_list_keyboard
 from app.services.database import update_session_confirmation
 from app.keyboards.menu import get_main_menu_keyboard, back_to_main_menu_keyboard
 from app.utils.logger import session_logger
-
 
 @router.callback_query(F.data.startswith("game_"))
 async def process_game_selection(callback: CallbackQuery, state: FSMContext):
@@ -78,23 +80,21 @@ async def show_session_info(callback: CallbackQuery):
     session_id = int(callback.data.split("_")[-1])
     session_logger.info(f"User {user_id} requested info for session {session_id}")
 
-    sessions = await get_sessions()
-    session = next((s for s in sessions if s[0] == session_id), None)
+    session = await get_session_info(session_id)  # Предполагаем, что эта функция возвращает полную информацию о сессии
 
     if not session:
         session_logger.warning(f"Session {session_id} not found for user {user_id}")
         await callback.answer("Сессия не найдена.", show_alert=True)
         return
 
-    session_id, game, date, time, max_players, current_players, creator_name = session
     participants = await get_session_participants(session_id)
 
     text = (f"Информация о сессии:\n"
             f"ID: {session_id}\n"
-            f"Игра: {game}\n"
-            f"Дата: {date}, Время: {time}\n"
-            f"Игроки: {current_players}/{max_players}\n"
-            f"Создатель: {creator_name}\n\n"
+            f"Игра: {session['game']}\n"
+            f"Дата: {session['date']}, Время: {session['time']}\n"
+            f"Игроки: {len(participants)}/{session['max_players']}\n"
+            f"Создатель: {session['creator_name']}\n\n"
             f"Участники:\n")
 
     for participant in participants:
@@ -103,9 +103,11 @@ async def show_session_info(callback: CallbackQuery):
     builder = InlineKeyboardBuilder()
 
     is_participant = any(participant['id'] == user_id for participant in participants)
-    session_logger.info(f"User {user_id} is_participant: {is_participant}")
+    is_creator = session['creator_id'] == user_id  # Теперь мы сравниваем user_id
 
-    if is_participant:
+    if is_creator:
+        builder.button(text="Удалить сессию", callback_data=f"delete_session_{session_id}")
+    elif is_participant:
         builder.button(text="Выйти из сессии", callback_data=f"leave_{session_id}")
     else:
         builder.button(text="Присоединиться", callback_data=f"join_{session_id}")
@@ -154,20 +156,14 @@ async def confirm_session(callback: CallbackQuery, bot: Bot):
 
     session_logger.info(f"User {user_id} confirming participation in session {session_id}")
     await update_session_confirmation(session_id, user_id, "confirmed")
+    await add_user_session_event(user_id, session_id, "confirmed")
 
-    # Удаляем сообщение с кнопками подтверждения
     await callback.message.delete()
-
-    # Удаляем предыдущие сообщения пользователя
     await message_cleaner.delete_previous_messages(bot, user_id)
-
-    # Отправляем новое сообщение с главным меню
     new_message = await callback.message.answer(
         "Вы подтвердили свое участие в сессии. Вот главное меню:",
         reply_markup=get_main_menu_keyboard(user_id)
     )
-
-    # Добавляем новое сообщение в список для последующего удаления
     await message_cleaner.add_message_to_delete(user_id, new_message)
 
     session_info = await get_session_info(session_id)
@@ -193,16 +189,12 @@ async def confirm_session(callback: CallbackQuery, bot: Bot):
                     "Вот главное меню:",
                     reply_markup=get_main_menu_keyboard(user_id)
                 )
-
-                # Добавляем новое сообщение в список для последующего удаления
                 await message_cleaner.add_message_to_delete(user_id, new_message)
 
             except Exception as e:
                 session_logger.error(f"Failed to send notification to user {participant['id']}: {e}", exc_info=True)
 
     session_logger.info(f"User {user_id} confirmed participation in session {session_id}. Notifications sent.")
-
-    # Отвечаем на callback, чтобы убрать "часики" на кнопке
     await callback.answer()
 
 @router.callback_query(F.data.startswith("decline_"))
@@ -214,22 +206,17 @@ async def decline_session(callback: CallbackQuery, bot: Bot):
 
     session_logger.info(f"User {user_id} declining participation in session {session_id}")
 
-    # Удаляем сообщение с кнопками подтверждения/отклонения
     await callback.message.delete()
-
-    # Удаляем предыдущие сообщения пользователя
     await message_cleaner.delete_previous_messages(bot, user_id)
 
     await update_session_confirmation(session_id, user_id, "declined")
     await remove_participant(session_id, user_id)
+    await add_user_session_event(user_id, session_id, "declined")
 
-    # Отправляем новое сообщение с главным меню
     new_message = await callback.message.answer(
         "Вы отклонили участие в сессии и были удалены из списка участников. Вот главное меню:",
         reply_markup=get_main_menu_keyboard(user_id)
     )
-
-    # Добавляем новое сообщение в список для последующего удаления
     await message_cleaner.add_message_to_delete(user_id, new_message)
 
     session_info = await get_session_info(session_id)
@@ -255,14 +242,59 @@ async def decline_session(callback: CallbackQuery, bot: Bot):
                     "Вот главное меню:",
                     reply_markup=get_main_menu_keyboard(user_id)
                 )
-
-                # Добавляем новое сообщение в список для последующего удаления
                 await message_cleaner.add_message_to_delete(user_id, new_message)
 
             except Exception as e:
                 session_logger.error(f"Failed to send notification to user {participant['id']}: {e}", exc_info=True)
 
     session_logger.info(f"User {user_id} declined participation in session {session_id}. Notifications sent.")
-
-    # Отвечаем на callback, чтобы убрать "часики" на кнопке
     await callback.answer()
+
+
+@router.callback_query(F.data.startswith("delete_session_"))
+async def delete_game_session(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    session_id = int(callback.data.split("_")[-1])
+    session_logger.info(f"User {user_id} attempting to delete session {session_id}")
+
+    success = await delete_session(session_id, user_id)
+
+    if success:
+        await add_user_session_event(user_id, session_id, "deleted")
+        await callback.answer("Сессия успешно удалена.", show_alert=True)
+        await show_my_sessions(callback)
+        session_logger.info(f"Session {session_id} successfully deleted by user {user_id}")
+    else:
+        await callback.answer("Не удалось удалить сессию. Возможно, у вас нет прав на это действие.", show_alert=True)
+        session_logger.warning(f"Failed to delete session {session_id} by user {user_id}")
+
+
+@router.callback_query(F.data == "session_history")
+async def show_session_history(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    session_logger.info(f"User {user_id} requested session history")
+
+    history = await get_user_session_history(user_id)
+
+    if not history:
+        await callback.answer("У вас пока нет истории событий.", show_alert=True)
+        return
+
+    history_text = "История событий сессий:\n\n"
+    for event in history:
+        event_type_text = {
+            "confirmed": "подтвердил участие в",
+            "declined": "отклонил участие в",
+            "deleted": "удалил"
+        }.get(event['event_type'], event['event_type'])
+
+        history_text += (f"{event['timestamp']}: {event['user_name']} {event_type_text} "
+                         f"сессии {event['game']} (ID: {event['session_id']})\n")
+
+    # Разбиваем сообщение на части, если оно слишком длинное
+    max_message_length = 4096
+    for i in range(0, len(history_text), max_message_length):
+        await callback.message.answer(history_text[i:i + max_message_length])
+
+    await callback.message.answer("Конец истории", reply_markup=get_back_menu_keyboard())
+    session_logger.info(f"Session history displayed for user {user_id}")

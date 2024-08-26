@@ -99,17 +99,21 @@ async def show_my_sessions(callback: CallbackQuery):
     user_sessions = await get_user_sessions(user_id)
 
     if not user_sessions:
-        menu_logger.info(f"No sessions found for user {user_id}")
-        await callback.message.edit_text("У вас пока нет созданных или посещенных сессий.",
+        menu_logger.info(f"No upcoming sessions found for user {user_id}")
+        await callback.message.edit_text("У вас нет предстоящих сессий.",
                                          reply_markup=get_back_menu_keyboard())
         return
 
-    sessions_text = "Ваши сессии:\n\n"
+    sessions_text = "Ваши предстоящие сессии:\n\n"
     for session in user_sessions:
         session_type = "Создана вами" if session['is_creator'] else "Участие"
-        sessions_text += f"ID: {session['id']}, Игра: {session['game']}, Дата: {session['date']}, {session_type}\n"
+        sessions_text += (f"ID: {session['id']}, Игра: {session['game']}\n"
+                          f"Дата: {session['date']}, Время: {session['time']}\n"
+                          f"Игроки: {session['current_players']}/{session['max_players']}\n"
+                          f"Статус: {session_type}\n"
+                          f"-------------------\n")
 
     await callback.message.edit_text(
         sessions_text, reply_markup=get_my_sessions_keyboard(user_sessions)
     )
-    menu_logger.info(f"Sessions list displayed for user {user_id}")
+    menu_logger.info(f"Upcoming sessions list displayed for user {user_id}")

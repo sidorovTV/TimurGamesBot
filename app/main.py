@@ -31,6 +31,9 @@ async def main():
     register_handlers(dp)
     register_callback(dp)
 
+    # Установка разрешенных обновлений
+    allowed_updates = ["message", "callback_query"]
+
     asyncio.create_task(scheduled_reminders(bot))
 
     # Способ для пропуска старых апдейтов
@@ -39,7 +42,7 @@ async def main():
     try:
         # Обработка pooling
         main_logger.info("Starting polling")
-        await dp.start_polling(bot)
+        await dp.start_polling(bot, allowed_updates=allowed_updates)
     except Exception as e:
         main_logger.error(f"An error occurred: {e}", exc_info=True)
     finally:
