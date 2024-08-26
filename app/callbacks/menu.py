@@ -16,6 +16,7 @@ router = Router()
 
 
 @router.callback_query(F.data == "manage_users")
+
 async def manage_users(callback: CallbackQuery):
     menu_logger.info(f"User {callback.from_user.id} accessed manage_users menu")
     if callback.from_user.id != config.admin_user_id:

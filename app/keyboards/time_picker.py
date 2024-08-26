@@ -1,6 +1,9 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.types import CallbackQuery
 
+from app.keyboards.menu import get_cancel_keyboard
+
+
 def get_time_picker_keyboard():
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
@@ -41,6 +44,9 @@ def get_time_picker_keyboard():
         ],
         [
             InlineKeyboardButton(text="Другое время", callback_data="time_custom"),
+        ],
+        [
+            InlineKeyboardButton(text="Отмена", callback_data="cancel_session_creation")
         ]
     ])
     return keyboard
