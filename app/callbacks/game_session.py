@@ -280,21 +280,21 @@ async def show_session_history(callback: CallbackQuery):
         await callback.answer("У вас пока нет истории событий.", show_alert=True)
         return
 
-    history_text = "История событий сессий:\n\n"
+    history_text = ""
     for event in history:
         event_type_text = {
-            "confirmed": "подтвердил участие в",
-            "declined": "отклонил участие в",
+            "confirmed": "подтвердил ",
+            "declined": "отклонил ",
             "deleted": "удалил"
         }.get(event['event_type'], event['event_type'])
 
-        history_text += (f"{event['timestamp']}: {event['user_name']} {event_type_text} "
-                         f"сессии {event['game']} (ID: {event['session_id']})\n")
+        history_text += (f"{event['timestamp'][11:16]} - {event['user_name']} {event_type_text} "
+                         f"(ID: {event['session_id']})\n")
 
-    # Разбиваем сообщение на части, если оно слишком длинное
-    max_message_length = 4096
-    for i in range(0, len(history_text), max_message_length):
-        await callback.message.answer(history_text[i:i + max_message_length])
+    # Разбиваем историю на части по 200 символов
+    max_length = 200
+    history_parts = [history_text[i:i+max_length] for i in range(0, len(history_text), max_length)]
 
-    await callback.message.answer("Конец истории", reply_markup=get_back_menu_keyboard())
+    await callback.answer(history_parts[0], show_alert=True)
+
     session_logger.info(f"Session history displayed for user {user_id}")

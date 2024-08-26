@@ -36,7 +36,7 @@ async def delete_irrelevant_message(message: Message):
         common_logger.error(f"Unexpected error when deleting message {message.message_id} from user {user_id}: {e}")
 
     try:
-        reminder = await message.answer("Пожалуйста, используйте /start или кнопки меню.")
+        reminder = await message.answer("Пожалуйста, используйте кнопки меню.")
         common_logger.info(f"Sent reminder (message ID: {reminder.message_id}) to user {user_id}")
 
         # Запускаем задачу на удаление сообщения-напоминания через 2 секунд

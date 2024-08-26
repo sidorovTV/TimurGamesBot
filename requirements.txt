@@ -4,3 +4,4 @@ pydantic==2.7.0
 pydantic-settings==2.2.1
 aiosqlite==0.20.0
 aioschedule==0.5.2
+aiogram-calendar==0.5.0
