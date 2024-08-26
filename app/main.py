@@ -14,7 +14,7 @@ from app.utils.logger import main_logger
 async def scheduled_reminders(bot: Bot):
     while True:
         await send_session_reminders(bot)
-        await asyncio.sleep(60)  # Проверяем каждый час
+        await asyncio.sleep(3600)  # Проверяем каждый час
 
 
 async def main():

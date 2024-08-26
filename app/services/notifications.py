@@ -1,6 +1,6 @@
 from aiogram import Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from app.services.database import get_upcoming_sessions, update_session_confirmation
+from app.services.database import get_upcoming_sessions
 from app.utils.logger import notification_logger
 from app.utils.message_cleaner import message_cleaner
 
