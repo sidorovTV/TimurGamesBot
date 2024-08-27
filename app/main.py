@@ -14,14 +14,6 @@ import time
 from datetime import datetime
 import pytz
 
-# Установка часового пояса
-os.environ['TZ'] = 'Europe/Moscow'
-time.tzset()
-
-# Проверка текущего времени
-moscow_tz = pytz.timezone('Europe/Moscow')
-current_time = datetime.now(moscow_tz)
-print(f"Current time: {current_time}")
 
 async def scheduled_reminders(bot: Bot):
     while True:
@@ -63,5 +55,14 @@ async def main():
 
 if __name__ == '__main__':
     # Инициализация базы данных
+
+    # Установка часового пояса
+    os.environ['TZ'] = 'Europe/Moscow'
+    time.tzset()
+
+    # Проверка текущего времени
+    moscow_tz = pytz.timezone('Europe/Moscow')
+    current_time = datetime.now(moscow_tz)
+    print(f"Current time: {current_time}")
 
     asyncio.run(main())
