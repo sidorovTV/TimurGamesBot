@@ -1,8 +1,11 @@
 # Используйте базовый образ Python
 FROM python:3.10-slim
 
+RUN mkdir /data
+RUN mkdir /logs
+
+
 # Установите зависимости
-WORKDIR /app
 COPY requirements.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -10,6 +13,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Установите переменные окружения
+ENV PYTHONPATH=.
 ENV BOT_TOKEN=7207580139:AAGD32zSX_e6EWAI5kaFEoj0CMuywZ5nMBg
 ENV ADMIN_USER_ID=795051614
 
