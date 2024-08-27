@@ -9,7 +9,19 @@ from handlers import register_handlers
 from callbacks import register_callback
 from services.notifications import send_session_reminders
 from app.utils.logger import main_logger
+import os
+import time
+from datetime import datetime
+import pytz
 
+# Установка часового пояса
+os.environ['TZ'] = 'Europe/Moscow'
+time.tzset()
+
+# Проверка текущего времени
+moscow_tz = pytz.timezone('Europe/Moscow')
+current_time = datetime.now(moscow_tz)
+print(f"Current time: {current_time}")
 
 async def scheduled_reminders(bot: Bot):
     while True:

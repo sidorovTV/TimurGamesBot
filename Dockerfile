@@ -1,5 +1,9 @@
 FROM python:3.9
 
+# Установка tzdata и настройка часового пояса
+RUN apt-get update && apt-get install -y tzdata
+ENV TZ=Europe/Moscow
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 RUN mkdir /data
 RUN mkdir /logs
@@ -16,9 +20,5 @@ COPY . .
 
 # Установите переменные окружения
 ENV PYTHONPATH=.
-
-# Установка часового пояса
-ENV TZ=Europe/Moscow
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 CMD ["python", "app/main.py"]
