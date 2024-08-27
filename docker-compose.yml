@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - bot_data:/app/data
+    environment:
+      - TZ=Europe/Moscow
+    restart: always
+    command: python app/main.py
+
+volumes:
+  bot_data:
