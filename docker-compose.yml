@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: Dockerfile
     volumes:
-      - bot_data:/app/data
+      - bot_data:/data
     environment:
       - TZ=Europe/Moscow
       - BOT_TOKEN=7207580139:AAGD32zSX_e6EWAI5kaFEoj0CMuywZ5nMBg

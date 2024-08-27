@@ -1,16 +1,21 @@
 FROM python:3.9
 
-WORKDIR /app
 
-# Установка зависимостей
-COPY requirements.txt .
+RUN mkdir /data
+RUN mkdir /logs
+
+# Определяем volume
+VOLUME /data
+
+# Установите зависимости
+COPY requirements.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Копирование исходного кода
+# Скопируйте код вашего бота в контейнер
 COPY . .
 
-# Создание директории для данных
-RUN mkdir -p /app/data
+# Установите переменные окружения
+ENV PYTHONPATH=.
 
 # Установка часового пояса
 ENV TZ=Europe/Moscow
