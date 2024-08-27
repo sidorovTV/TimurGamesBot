@@ -9,6 +9,8 @@ services:
       - bot_data:/app/data
     environment:
       - TZ=Europe/Moscow
+      - BOT_TOKEN=${BOT_TOKEN}
+      - ADMIN_USER_ID=${ADMIN_USER_ID}
     restart: always
     command: python app/main.py
 
